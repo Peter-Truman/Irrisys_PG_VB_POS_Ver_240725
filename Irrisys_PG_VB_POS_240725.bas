@@ -45,23 +45,23 @@ Config_Start
   EBTRB = OFF	;Boot Block (000000-0007FFh) not protected from table reads executed in other blocks
 Config_End
 
-;**** End of Fuse Configurator Settings ****
-;-------------------------------------------------------------------------------
-OSCCON.6=1
-OSCCON.5=1
-OSCCON.4=1          'setup at 8MGz
-OSCTUNE.6=1         'x 4
+OSCCON = %01110000 ' IRCF = 111 for 8 MHz
+OSCTUNE.6 = 1 ' Enable PLL for x4 (8 MHz * 4 = 32 MHz)
 
-Declare Xtal=32
+Declare Xtal = 32
+
+' Buzzer Pin Definition
+Symbol BUZZER = PORTC.2
 
 ' LCD Pin Definitions (NHD-0420AZ-FL-YBW-33V3, 3.3V, 4-bit parallel)
-Symbol LCD_RS = PORTA.6
-Symbol LCD_RW = PORTA.5
-Symbol LCD_EN = PORTA.7
-Symbol LCD_D4 = PORTA.0
-Symbol LCD_D5 = PORTA.1
-Symbol LCD_D6 = PORTA.2
-Symbol LCD_D7 = PORTA.3
+
+Declare LCD_Type=0
+Declare LCD_DTPin PORTA.0 ' Used for 4-line interface.
+Declare LCD_ENPin PORTA.7
+Declare LCD_RSPin PORTA.6
+Declare LCD_RWPin = PORTA.5
+Declare LCD_Interface 4
+Declare LCD_Lines = 4
 
 ' Rotary Encoder Definitions
 Symbol ENC_A = PORTB.1
@@ -75,113 +75,110 @@ Symbol RTC_INT = PORTB.0
 Symbol SDA = PORTC.4
 Symbol SCL = PORTC.3
 
+'Setup USART  (Real World)
+Declare Hserial_Baud = 115200
+Declare Hserial_Clear = 1                                                                 
+Declare HRSOut_Pin = PORTB.6
+Declare HRSIn_Pin = PORTB.7
+
+
 ' Constants
 Symbol LCD_WIDTH = 20
 Symbol LCD_Lines = 4
 Symbol LONG_PRESS = 2000  ' 2 seconds for long press (in ms)
 Symbol I2C_ADDR_DS3231 = $D0  ' DS3231 I2C address
 
-' LCD Initialization for NHD-0420AZ-FL-YBW-33V3
-Proc LCD_Init()
-  Low LCD_RS
-  Low LCD_RW
-  Low LCD_EN
-  Low LCD_D4
-  Low LCD_D5
-  Low LCD_D6
-  Low LCD_D7
-  DelayMS 50          ' Wait for LCD power-up (>40ms per datasheet)
-  LCD_WriteNibble($03)
-  DelayMS 5           ' Wait >4.1ms
-  LCD_WriteNibble($03)
-  DelayMS 5           ' Wait >100us
-  LCD_WriteNibble($03)
-  DelayMS 5
-  LCD_WriteNibble($02)  ' Set 4-bit mode
-  LCD_Command($28)      ' 4-bit, 2 lines (configured for 4x20), 5x8 font
-  LCD_Command($0C)      ' Display on, cursor off, blink off
-  LCD_Command($06)      ' Entry mode: increment, no shift
-  LCD_Command($01)      ' Clear display
-  DelayMS 2            ' Clear display delay (>1.53ms)
+' Variables
+Dim B_General As Byte
+
+' Buzzer Startup Procedure
+Proc BuzzerStartup()
+Dim cycle As Byte
+For cycle = 1 To 5
+High BUZZER
+DelayMS 100
+Low BUZZER
+DelayMS 100
+Next
 EndProc
+
+
 
 ' Write Nibble to LCD
 Proc LCD_WriteNibble(Nibble As Byte)
-  LCD_D4 = Nibble.0
-  LCD_D5 = Nibble.1
-  LCD_D6 = Nibble.2
-  LCD_D7 = Nibble.3
-  High LCD_EN   ' Enable pulse (>450ns)
-  DelayUS 1
-  Low LCD_EN
-  DelayUS 50           ' Execution time (>37us per datasheet)
+LCD_D4 = Nibble.0
+LCD_D5 = Nibble.1
+LCD_D6 = Nibble.2
+LCD_D7 = Nibble.3
+High LCD_EN   ' Enable pulse (>450ns)
+DelayUS 1
+Low LCD_EN
+DelayUS 50           ' Execution time (>37us per datasheet)
 EndProc
 
-' Send Command to LCD
-Proc LCD_Command(Cmd As Byte)
-  Low LCD_RS
-  LCD_WriteNibble(Cmd >> 4)
-  LCD_WriteNibble(Cmd)
-  DelayUS 50           ' Command execution time
-EndProc
+'' Send Command to LCD
+'Proc LCD_Command(Cmd As Byte)
+'Low LCD_RS
+'LCD_WriteNibble(Cmd >> 4)
+'LCD_WriteNibble(Cmd)
+'DelayUS 50           ' Command execution time
+'EndProc
 
 ' Write Character to LCD
 Proc LCD_WriteChar(Ch As Byte)
-  High LCD_RS
-  LCD_WriteNibble(Ch >> 4)
-  LCD_WriteNibble(Ch)
-  DelayUS 50           ' Data write time
+High LCD_RS
+LCD_WriteNibble(Ch >> 4)
+LCD_WriteNibble(Ch)
+DelayUS 50           ' Data write time
 EndProc
 
 ' Set LCD Cursor Position for 4x20 Display
 Proc LCD_SetCursor(B_Line As Byte, Pos As Byte)
-  Dim Addr As Byte
-  Select B_Line
-    Case 1
-        Addr = $80 + Pos  ' Line 1: 0x00-0x13
-    Case 2
-        Addr = $C0 + Pos  ' Line 2: 0x40-0x53
-    Case 3
-        Addr = $94 + Pos  ' Line 3: 0x14-0x27
-    Case 4
-        Addr = $D4 + Pos  ' Line 4: 0x54-0x67
-    Else
-        Addr = $80        ' Default to line 1, position 0
-  EndSelect
-  LCD_Command(Addr)
+Dim Addr As Byte
+Select B_Line
+Case 1
+Addr = $80 + Pos  ' Line 1: 0x00-0x13
+Case 2
+Addr = $C0 + Pos  ' Line 2: 0x40-0x53
+Case 3
+Addr = $94 + Pos  ' Line 3: 0x14-0x27
+Case 4
+Addr = $D4 + Pos  ' Line 4: 0x54-0x67
+Else
+Addr = $80        ' Default to line 1, position 0
+EndSelect
+LCD_Command(Addr)
 EndProc
 
 ' Clear LCD
 Proc LCD_Clear()
-    Cls
-  'CD_Command($01)
-  DelayMS 2            ' Clear display delay
+Cls
+'DelayMS 2            ' Clear display delay
 EndProc
 
 ' Main Program
 Main:
-  ADCON1 = $0F       ' All pins digital
-  TRISA = %00000000  ' PORTA as output for LCD
-  TRISB = %11000111  ' PORTB.0,1,2,6 as inputs for encoder and RTC
-  TRISC = %00011000  ' PORTC.3,4 for I2C
-  OSCCON = %01110010 ' 16 MHz internal oscillator
+ADCON1 = $0F       ' All pins digital
+TRISA = %00000000  ' PORTA as output for LCD
+TRISB = %11000111  ' PORTB.0,1,2,6 as inputs for encoder and RTC
+TRISC = %00011000  ' PORTC.3,4 for I2C, RC2 as output for buzzer
 
-  LCD_Init()
-  LCD_Clear()
-  LCD_SetCursor(1, 0)
-  LCD_WriteChar("H")
-  LCD_WriteChar("e")
-  LCD_WriteChar("l")
-  LCD_WriteChar("l")
-  LCD_WriteChar("o")
-  LCD_WriteChar(" ")
-  LCD_WriteChar("W")
-  LCD_WriteChar("o")
-  LCD_WriteChar("r")
-  LCD_WriteChar("l")
-  LCD_WriteChar("d")
+BuzzerStartup()
+'LCD_Init()
+LCD_Clear()
+LCD_SetCursor(1, 0)
 
-  While 1 = 1
-    DelayMS 1000  ' Loop forever with a delay
-  Wend
+'While 1=1
+'    Print At 1,1,"Hello World"
+'    HRSOut "Testing",13
+'DelayMS 500
+'Wend
+
+While 1 = 1
+LCD_SetCursor(2, 0)
+HRSOut "Var = ", Dec3 B_General,10,13
+Print "Var = ", Dec3 B_General
+Inc B_General
+DelayMS 1000  ' Loop forever with a delay
+Wend
 End

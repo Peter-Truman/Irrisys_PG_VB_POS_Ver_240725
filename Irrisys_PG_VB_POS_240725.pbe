@@ -1,3 +1,2 @@
-18F2525,624,14,32
-    Program Compiled OK. 624 Bytes used from a possible 49152
-    14 Variables used in the 18F2525 from a possible 3967
+ERROR
+Error at Line [150]	In file [C:\Users\PeeWee\Documents\engineering_repo\Irrisys_PG_VB_POS_Ver_240725\Irrisys_PG_VB_POS_240725.bas]	*** Item ' LCD_Command ' not found! ***
